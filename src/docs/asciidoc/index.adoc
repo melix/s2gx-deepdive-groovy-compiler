@@ -1,6 +1,6 @@
-= Convention over configuration: the Gradle way
+= Deep dive into the Groovy compiler
 by Cédric Champeau (@CedricChampeau)
-2015-05-05
+2015-09-15
 :revnumber: {project-version}
 :example-caption!:
 ifndef::imagesdir[:imagesdir: images]
@@ -42,432 +42,421 @@ image::groovy-logo.png[]
 
 |===
 
-== Gradle
+== Agenda
 
-* A dependency management engine
-* A dependency based execution system
-* A plugin system
-* A set of plugins
+* Interpreted vs compiled
+* Scripts vs classes
+* Parsing
+* Abstract Syntax Trees
+* Resolving
+* Run-time vs compile-time
+* Static type checking
+* Bytecode generation
+* Class loading
 
-== Gradle
+== Interpreted vs compiled
 
-* Open Source
-* Language agnostic
-** builds Java, Groovy, Scala, C++, assembler, ...
-* Designed for extensions
-* Integrates well with Ivy, Ant, Maven, ...
+* Groovy is a dynamic language
+* Dynamic != interpreted
+* Interpreted == a runtime interprets an AST
+* JVM is an interpreter + a JIT
+* Groovy compiles down to JVM bytecode
 
-== About this slidedeck
+== Scripts vs classes
+=== A Java class
 
-* Slides written using {adoctor}
-* Converted to {deckjs}
-* Exported to PDF thanks to {deck2pdf}
-* Integrated with {gradle}
-
-[source,groovy]
-----
-include::{basedir}/build.gradle[tags=example_apply]
-----
-
-== Export to PDF
-
-[source,groovy]
-----
-include::{basedir}/gradle/pdf.gradle[]
-----
-
-== Gradle basics
-
-* build scripts (often _build.gradle_)
-* a task execution graph
-* inline "plugins"
-* binary plugins
-* plugin portal
-* Gradle wrapper
-
-== Gradle basics
-
-[[gradle-quote]]
-[quote, inspired by Moshe Feldenkrais]
-____
-Make the impossible possible, +
-make the possible easy +
-and make the easy elegant
-____
-
-== First step : Gradle wrapper
-
-* Enforces a specific version of Gradle
-* Wrapper committed in VCS
-* Makes sure that the version of Gradle being used is the one the project is supposed to be compiled with
-* There's no good reason not to use it
-
-[[gradle-quote]]
-[quote, me]
-____
-Always use the wrapper. Always.
-____
-
-== Convention over configuration
-
-[source,groovy]
-.A simple Java project
-----
-include::{examples}/basic-java/build.gradle[]
-----
-
-== Convention over configuration
-
-.Before build
-----
-basic-java
-├── build.gradle
-└── src
-    ├── main
-    │   └── java
-    │       └── com
-    │           └── acme
-    │               └── Greeter.java
-    └── test
-        └── java
-            └── com
-                └── acme
-                    └── GreeterTest.java
-----
-
-== Convention over configuration
-
-.After build
-----
-basic-java/
-├── build
-│   ├── classes
-│   │   ├── main
-│   │   │   └── com
-│   │   │       └── acme
-│   │   │           └── Greeter.class
-│   │   └── test
-│   │       └── com
-│   │           └── acme
-│   │               └── GreeterTest.class
-│   ├── libs
-│   │   └── basic-java.jar
-│   ├── reports
-│   ├── test-results
-│   └── tmp
-├── build.gradle
-└── src
-    ...
-----
-
-== Integration tests
-
-What conventions exist for defining integration tests?
-
-=== Defining a new source set
-
-[source,groovy]
-----
-include::{examples}/java-inttest/build.gradle[tags=add_sourceset]
-----
-
-=== Create an integTest task
-
-[source,groovy]
-----
-include::{examples}/java-inttest/build.gradle[tags=inttest_task]
-----
-
-=== Define the integration test classpath
-
-[source,groovy]
-----
-include::{examples}/java-inttest/build.gradle[tags=configurations]
-----
-
-== Write the integration test
-
-[source,groovy]
-----
-include::{examples}/java-inttest/src/integTest/groovy/com/acme/GreetingSpec.groovy[]
-----
-
-=== Run it
-
-----
-$ ./gradlew --daemon j-i:iT
-:java-inttest:compileJava
-:java-inttest:compileGroovy UP-TO-DATE
-:java-inttest:processResources UP-TO-DATE
-:java-inttest:classes
-:java-inttest:jar
-:java-inttest:compileIntegTestJava UP-TO-DATE
-:java-inttest:compileIntegTestGroovy
-:java-inttest:processIntegTestResources UP-TO-DATE
-:java-inttest:integTestClasses
-:java-inttest:integTest
-
-BUILD SUCCESSFUL
-
-Total time: 3.646 secs
-----
-
-== Creating a source jar
-
-[source,groovy]
-----
-include::{examples}/java-inttest-sourcesjar/build.gradle[tags=task_sourcesjar]
-----
-
-== What about other source trees?
-
-=== Building a custom convention
-
-[source,groovy]
-----
-include::{examples}/java-custom-artifacts/build.gradle[tags=custom_artifacts]
-----
-
-=== Output directory
-
-----
-examples/java-custom-artifacts/build/libs/
-├── java-custom-artifacts-integTest-sources.jar
-├── java-custom-artifacts-sources.jar
-└── java-custom-artifacts-test-sources.jar
-----
-
-=== Can we make it cleaner?
-
-* How about sharing it with other sub-projects?
-* How about sharing it with external projects?
-
-== Writing a plugin
-
-* Usually written in Groovy
-* Can be written in Java
-* Other languages not recommended (adds dependencies)
-
-=== Plugin structure
-
-image::plugin-structure.png[]
-
-== build.gradle
-
-[source,groovy]
-----
-include::{examples}/plugin-custom-artifacts/build.gradle[tags=minimal_build]
-----
-
-== Writing a plugin
-
-=== Plugin class
-
-[source,groovy]
-----
-class SourcesJarPlugin implements Plugin<Project> {
-    @Override
-    void apply(Project project) {
-        // do something
+```java
+public class Greeter {
+    public static void main(String... args) {
+        System.out.println("Hello, "+args[0]);
     }
 }
-----
+```
 
-=== Descriptor
+=== A Groovy script
 
-[source]
-.src/main/resources/META-INF/gradle-plugins/com.acme.sourcesjar.properties
-----
-include::{examples}/plugin-custom-artifacts/src/main/resources/META-INF/gradle-plugins/com.acme.sourcesjar.properties[]
-----
+```groovy
+println "Hello, $args[0]"
+```
 
-== Plugin code
+=== What is the difference?
 
-[source,groovy]
-.SourcesJarPlugin.groovy
-----
-include::{examples}/plugin-custom-artifacts/src/main/groovy/com/acme/SourcesJarPlugin.groovy[tags=main_body]
-----
+* Classes are compiled to bytecode
+* Scripts are *also* compiled to bytecode
+* So it's more a run-time vs compile-time discussion!
 
-== Test the plugin
+=== Compile-time
 
-[source,groovy]
-.SourcesJarPluginTest.groovy
-----
-include::{examples}/plugin-custom-artifacts/src/test/groovy/com/acme/SourcesJarPluginTest.groovy[tags=plugin_test,indent=0]
-----
+* Given a set of source files
+* Compile them
+* Output is bytecode
+** cacheable (library, jar file, ...)
+** loadable by the runtime (classloader)
 
-== Publishing the plugin
+=== Run-time
 
-=== The maven-publish plugin
+* Same as compile-time but...
+* done during execution of the program!
+* Groovy does *both*
+** consequences on packaging
+** consequences on the size of the runtime
 
-[source,groovy]
-----
-include::{examples}/plugin-custom-artifacts/build.gradle[tags=publish]
-----
+=== Run-time vs runtime
 
-=== Publish to local repo
+* A _runtime_ provides support libraries to execute a compiled program
+* Run-time is what happens at run time
+* Groovy has a runtime
+* Java also (the JRE, providing core classes)
 
-----
-$ ./gradlew --daemon publishToMavenLocal
-:plugin-custom-artifacts:generatePomFileForMavenJavaPublication
-:plugin-custom-artifacts:compileJava UP-TO-DATE
-:plugin-custom-artifacts:compileGroovy
-:plugin-custom-artifacts:processResources
-:plugin-custom-artifacts:classes
-:plugin-custom-artifacts:jar
-:plugin-custom-artifacts:publishMavenJavaPublicationToMavenLocal
-:plugin-custom-artifacts:publishToMavenLocal
+== Compilation phases
 
-BUILD SUCCESSFUL
+* Groovy has 9 compilation phases (see `org.codehaus.groovy.control.CompilePhase`)
+** initialization
+** *parsing*
+** *conversion*
+** *semantic analysis*
+** canonicalization
+** instruction selection
+** *class generation*
+** output
+** finalization
 
-Total time: 2.011 secs
-----
+=== Visualizing compilation phases
 
-== Use the plugin
+image::groovyconsole.png[]
 
-[source,groovy]
-----
-include::{examples}/java-custom-artifacts-using-plugin/build.gradle[tags=use_plugin]
-----
+=== Parsing
+
+* Converts source code (text) into a concrete syntax tree (CST)
+* Where we send _syntax errors_
+* Groovy tries to minimize the errors at that phase
+* We make use of *Antlr 2*
+** Migration to *Antlr 4* in progress
+* See `org.codehaus.groovy.antlr.AntlrParserPlugin`
+* Limited transformations available (and not recommended)
+
+=== Conversion
+
+* Converts a CST into an Abstract Syntax Tree
+* AST nodes are what the other compilation phases rely on
+* There's already semantic information in an AST
+* Earliest phase an AST transformation can hook into
+
+=== Conversion: AST nodes
+
+* 2 categories
+** statements (`IfStatement`, `BlockStatement`, ...)
+** expressions (`ConstantExpression`, `MethodCallExpression`, ...)
+* Know your AST!
+** particularily useful if you plan on writing AST transformations
+
+=== Conversion: AST nodes example
+
+```
+println "Hello, $args[0]"
+```
+
+image::println-hello-ast.png[]
+
+=== Conversion: Abstract Syntax Tree
+
+* typically where an interpreter would step in
+* at the core of the Groovy compiler
+* AST classes live in `org.codehaus.groovy.ast`
+* Still somehow _runtime agnostic_
+** In practice, `ClassNode` already bridges to `java.lang.Class`
+
+=== Semantic analysis
+
+* computation intensive phase
+* resolves class literals (symbols in AST, imports, ...)
+* resolves static imports (constants, methods) 
+* computes the scope of parameters and local variables
+* checks static scope vs instance scope
+* updates the AST of inner classes
+* collects AST transformations information
+
+=== Semantic analysis: resolving
+
+* High price in compilation time
+* When we see `Foo`, need to:
+** check if `Foo` is something on classpath
+** check if `Foo` is another class being compiled (or script)
+* Must avoid class initialization
+
+=== Canonicalization
+
+* Finalizes the AST with information deduced from the semantic analysis
+* Completes generation of AST of inner classes
+* Completes enumerations with calls to `super`
+* Weaves trait aspects into classes implementing traits
+* Usually last chance to hook an AST transformation
+
+=== Instruction selection
+
+* Formely used to select the instruction set (java version, ...)
+* (Optional) Type checking
+* Post-type checking trait corrections
+* (optional) static compiler specific AST transformations
+* in short: all AST operations that need to be done just before generating bytecode
+
+=== Class generation
+
+* Converts an AST into bytecode
+* Makes use of the ASM library
+* we'll get back to it...
 
 === Output
 
-----
-$ ./gradlew sourcesJar
-:java-custom-artifacts:integTestSourcesJar UP-TO-DATE
-:java-custom-artifacts:mainSourcesJar UP-TO-DATE
-:java-custom-artifacts:testSourcesJar UP-TO-DATE
-:java-custom-artifacts:sourcesJar UP-TO-DATE
-:java-custom-artifacts-using-plugin:integTestSourcesJar
-:java-custom-artifacts-using-plugin:mainSourcesJar
-:java-custom-artifacts-using-plugin:testSourcesJar
-:java-custom-artifacts-using-plugin:sourcesJar
-:java-inttest-sourcesjar:sourcesJar UP-TO-DATE
+* (optional) write the generated bytecode into a file
 
-BUILD SUCCESSFUL
+=== Finalization
 
-Total time: 0.704 secs
-----
+* supposed to perform cleanup tasks
+* Unused today!
 
-== Conventions evolved
+=== Putting it altogether
 
-* the *model* is important
-* plugins can reason on the model rather than outputs
+* `CompilationUnit` is responsible for the compile phases lifecycle
+* processes a set of `SourceUnit`
+* a `SourceUnit` represents a single source file (or script)
+* a `CompileUnit` gathers all ASTs of a compilation unit in a single place
+** typically used for _resolution_
+* all source units are processed _phase by phase_
 
-=== Generating a checksum for all artifacts
+== AST Transformations
 
-[source,groovy]
-----
-include::{basedir}/buildSrc/src/main/groovy/Checksum.groovy[]
-----
+=== What are AST xforms?
 
-=== Using the task
+* User code that hooks into the compiler
+* Allows transforming the AST during compilation
+* A transform runs at a specific phases
+** a best, _conversion_
+** usually, _semantic analysis_
+** no later than *canonicalization*
+* If you do it later... all bets are off!
 
-[source,groovy]
-----
-include::{basedir}/gradle/checksum.gradle[tags=checksum_simple]
-----
+=== User code?
 
-== Improving it
+* Groovy comes with several AST xforms
+* some features of the compiler are implemented as AST xforms
+** traits
+** static type checking
 
-* Each task can define its inputs/outputs
-* You should *always* do it
+== Composition of traits
 
-=== Improved checksum
+* Traits are a superior replacement to mixins
+* Built-in since Groovy 2.3
+* How are they compiled?
 
-[source,groovy]
-----
-include::{basedir}/buildSrc/src/main/groovy/ChecksumImproved.groovy[tags=improvement,indent=0]
-----
+=== Step 1: define a trait
 
-== Convention over configuraton : versioning
+```
+trait HasName {
+   String name
+}
+class NamedObject implements HasName {}
+```
 
-[source,groovy]
-----
-configurations.all {
-    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-        if (details.requested.version == 'default') {
-            def version = findDefaultVersionInCatalog(details.requested.group, details.requested.name)
-            details.useVersion version
+=== Step 2: convert a trait
+
+* Converts a trait into "JVM compatible" objets
+
+```
+interface HasName {
+    void setName(String name)
+
+    String getName(String name)
+
+    static class HasName$Trait$Helper {
+        public static void $init$(HasName $self) {
+        }
+
+        public static void $static$init$(java.lang.Class<HasName> $static$self) {
+        }
+
+        public static String getName(HasName $self) {
+            ((HasName$Trait$FieldHelper) ($self)).HasName__name$get()
+        }
+
+        public static void setName(HasName $self, String value) {
+            ((HasName$Trait$FieldHelper) ($self)).HasName__name$set(value)
         }
     }
-}
-----
 
-== A glance at the future
+    static interface HasName$Trait$FieldHelper {
 
-=== Android build plugin
+        final public static String $ins$1HasName__name
 
-[source,groovy]
-----
-apply plugin: 'com.android.application'
+        String HasName__name$set(String val)
 
-android {
-    compileSdkVersion 20
-    buildToolsVersion "20.0.0"
-
-    defaultConfig {
-        applicationId "com.mycompany.myapplication"
-        minSdkVersion 13
-        targetSdkVersion 20
-        versionCode 1
-        versionName "1.0"
+        String HasName__name$get()
     }
 
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+}
+```
+
+=== Step 3 : weave the consumer
+
+* At _canonicalization_:
+
+```
+class NamedObject implements HasName, HasName$Trait$FieldHelper {
+
+    static {
+        HasName$Trait$Helper.$static$init$(NamedObject)
+    }
+
+    private String HasName__name
+
+    @groovy.transform.CompileStatic
+    public String HasName__name$get() {
+        return HasName__name
+    }
+
+    @groovy.transform.CompileStatic
+    public String HasName__name$set(String val) {
+        HasName__name = val
+    }
+
+    @Traits$TraitBridge(traitClass = HasName, desc = '(Ljava/lang/String;)V')
+    public void setName(String arg1) {
+        HasName$Trait$Helper.setName(this, arg1)
+    }
+
+    @Traits$TraitBridge(traitClass = HasName, desc = '()Ljava/lang/String;')
+    public String getName() {
+        HasName$Trait$Helper.getName(this)
+    }
+
+    public String HasNametrait$super$getName() {
+        if ( this instanceof GeneratedGroovyProxy) {
+            (String) (InvokerHelper.invokeMethod((((GeneratedProxy) this)).getProxyTarget(), 'getName', new Object[]))
+        } else {
+            super.getName()
         }
-         debug {
-            debuggable true
+    }
+
+    public void HasNametrait$super$setName(String value) {
+        if ( this instanceof GeneratedGroovyProxy) {
+            InvokerHelper.invokeMethod((((GeneratedProxy) this)).getProxyTarget(), 'setName', new Object[])
+        } else {
+            super.setName(value)
         }
     }
+
 }
+```
 
-dependencies {
-    compile fileTree(dir: 'libs', include: ['*.jar'])
-    compile 'com.android.support:appcompat-v7:20.0.0'
-    compile project(path: ':app2, configuration: 'android-endpoints')
+== Bytecode generation
+
+* Groovy targets the JVM
+* Android is supported by post-processing bytecode (dex)
+* Bytecode generation library: ASM
+* 3 different backends
+** legacy
+** invokedynamic
+** static compilation
+
+=== But...
+
+* ASM is a low level API
+* Groovy uses a higher level API
+** `AsmCodeGenerator` : entry point, visitor pattern for the Groovy AST
+** writers: `WriterController`, `BinaryExpressionWriter`, `InvocationWriter`, ... map ASTs to ASM patterns
+** helpers: `BytecodeHelper`, `CompileStack`, `OperandStack` simplify the generation of bytecode
+ 
+=== Dealing with specific runtimes
+
+* Dedicated writer versions
+** `CallSiteWriter` -> `StaticTypesCallSiteWriter`
+* Optimized paths
+** Primitive optimizations
+** Static compilation
+** Static compiler can delegate to a dynamic writer
+
+=== Dynamic runtime
+
+```groovy
+int sum(int... values) {
+   values.sum()
 }
-----
+```
 
-== Defining your own model
+`groovyc example.groovy`
 
-* A new model API is in the works
-* Allows definining custom models
-* Models can be shared between plugins
-* Allows faster build execution as well as parallel task execution
+`javap -v example.class`
 
-=== Example
+=== Dynamic runtime (2)
 
-[source,groovy]
-----
-@Managed
-interface Person {
-  void setFirstName(String n); String getFirstName()
-  void setLastName(String n); String getLastName()
-}
+```
+         0: invokestatic  #17                 // Method $getCallSiteArray:()[Lorg/codehaus/groovy/runtime/callsite/CallSite;
+         3: astore_2
+         4: aload_2
+         5: ldc           #42                 // int 1
+         7: aaload
+         8: aload_1
+         9: invokeinterface #45,  2           // InterfaceMethod org/codehaus/groovy/runtime/callsite/CallSite.call:(Ljava/lang/Object;)Ljava/lang/Object;
+        14: invokestatic  #51                 // Method org/codehaus/groovy/runtime/typehandling/DefaultTypeTransformation.intUnbox:(Ljava/lang/Object;)I
+        17: ireturn
+```
 
-class PersonRules extends RuleSource {
-  @Model void person(Person p) {}
+=== Invokedynamic runtime
 
-  @Mutate void setFirstName(Person p) {
-    p.firstName = "John"
-  }
+`groovyc --indy example.groovy`
 
- @Mutate void createHelloTask(CollectionBuilder<Task> tasks, Person p) {
-    tasks.create("hello") {
-      doLast {
-        println "Hello $p.firstName $p.lastName!"
-      }
-    }
-  }
-}
+```
+         0: aload_1
+         1: invokedynamic #50,  0             // InvokeDynamic #1:invoke:([I)Ljava/lang/Object;
+         6: invokestatic  #56                 // Method org/codehaus/groovy/runtime/typehandling/DefaultTypeTransformation.intUnbox:(Ljava/lang/Object;)I
+         9: ireturn
+```
 
-apply plugin: PersonRules
-----
+=== Static compiler runtime
+
+`groovyc --configscript config.groovy example.groovy`
+
+```
+         0: aload_1
+         1: invokestatic  #38                 // Method org/codehaus/groovy/runtime/DefaultGroovyMethods.sum:([I)I
+         4: ireturn
+```
+
+=== Playing with bytecode generation
+
+```groovy
+            int run(int i) {
+                _new 'java/lang/Integer'
+                dup
+                iload 1
+                invokespecial 'java/lang/Integer.<init>','(I)V'
+                invokevirtual 'java/lang/Integer.intValue','()I'
+                ireturn
+            }
+```
+
+=== What happens?
+
+* An *AST transformation* is applied (`@Bytecode`)
+* Transforms "bytecode-like" method calls into actual *ASM* method calls
+* So allows writing "bytecode" directly as method body
+* Very useful for learning purposes
+* Limited to method bodies
+
+== Classloading
+
+* Bytecode -> `byte[]`
+* Still have to load that code
+* For precompiled classes, can be done by any classloader
+* `GroovyClassLoader`
+** supports generation of classes at *runtime*
+** will cache the generated classes
+
+=== CallSiteClassLoader
+
+* Used *only* on the legacy dynamic runtime
+* Loads _call site classes_
+* Call site class: dynamically generated classes which avoid use of reflection
 
 == Questions
 
@@ -475,7 +464,7 @@ image::qa.png[]
 
 == Thank you!
 
-* Slides and code : https://github.com/melix/bdxjug2015
-* Gradle documentation : http://gradle.org/docs/current/userguide/userguide
+* Slides and code : https://github.com/melix/
+* Groovy documentation : http://groovy-lang.org/documentation.html
 * Follow me: http://twitter.com/CedricChampeau[@CedricChampeau]
 

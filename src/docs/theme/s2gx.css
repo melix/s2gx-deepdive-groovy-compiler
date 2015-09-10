@@ -1,4 +1,5 @@
-@import url(https://fonts.googleapis.com/css?family=Ubuntu:300,700,300italic,700italic);
+
+
 /**
  * Blood theme for reveal.js
  * Author: Walther http://github.com/Walther
@@ -19,7 +20,7 @@ body {
 }
 
 .reveal {
-  font-family: "Proxima Nova Regular", Ubuntu, "sans-serif";
+  font-family: "proxima_nova_rgregular", "sans-serif";
   font-size: 36px;
   font-weight: normal;
   letter-spacing: -0.02em;
@@ -41,7 +42,7 @@ body {
 .reveal h6 {
   margin: 0 0 20px 0;
   color: #950000;
-  font-family: Domine, Ubuntu, "sans-serif";
+  font-family: Domine, "sans-serif";
   line-height: 0.9em;
   letter-spacing: 0.02em;
   
@@ -162,7 +163,8 @@ body {
   text-shadow: 1px 1px 1px #000; }
 
 .reveal p code {
-  background-color: #23241f;
+  font-family: "Source Code Pro", "proxima_nova_rgregular", "sans-serif";
+  background-color: #eeeeee;
   display: inline-block;
   border-radius: 7px; }
 
