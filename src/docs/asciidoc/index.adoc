@@ -480,7 +480,7 @@ image::GradleLogoLarge.png[]
 
 == Thank you!
 
-* Slides and code : https://github.com/melix/
+* Slides and code : https://github.com/melix/s2gx-deepdive-groovy-compiler
 * Groovy documentation : http://groovy-lang.org/documentation.html
 * Follow me: http://twitter.com/CedricChampeau[@CedricChampeau]
 
