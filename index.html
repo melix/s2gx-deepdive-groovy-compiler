@@ -1,0 +1,310 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="author" content="by Cédric Champeau (@CedricChampeau)" /><title>Deep dive into the Groovy compiler</title><meta content="yes" name="apple-mobile-web-app-capable" /><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style" /><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui" name="viewport" /><link href="reveal.js/css/reveal.css" rel="stylesheet" /><link rel="stylesheet" href="reveal.js/css/theme/s2gx.css" id="theme" /><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css" /><style>/* Stylesheet for CodeRay to match GitHub theme | MIT License | http://foundation.zurb.com */
+/*pre.CodeRay {background-color:#f7f7f8;}*/
+.CodeRay .line-numbers{border-right:1px solid #d8d8d8;padding:0 0.5em 0 .25em}
+.CodeRay span.line-numbers{display:inline-block;margin-right:.5em;color:rgba(0,0,0,.3)}
+.CodeRay .line-numbers strong{font-weight: normal}
+table.CodeRay{border-collapse:separate;border-spacing:0;margin-bottom:0;border:0;background:none}
+table.CodeRay td{vertical-align: top}
+table.CodeRay td.line-numbers{text-align:right}
+table.CodeRay td.line-numbers>pre{padding:0;color:rgba(0,0,0,.3)}
+table.CodeRay td.code{padding:0 0 0 .5em}
+table.CodeRay td.code>pre{padding:0}
+.CodeRay .debug{color:#fff !important;background:#000080 !important}
+.CodeRay .annotation{color:#007}
+.CodeRay .attribute-name{color:#000080}
+.CodeRay .attribute-value{color:#700}
+.CodeRay .binary{color:#509}
+.CodeRay .comment{color:#998;font-style:italic}
+.CodeRay .char{color:#04d}
+.CodeRay .char .content{color:#04d}
+.CodeRay .char .delimiter{color:#039}
+.CodeRay .class{color:#458;font-weight:bold}
+.CodeRay .complex{color:#a08}
+.CodeRay .constant,.CodeRay .predefined-constant{color:#008080}
+.CodeRay .color{color:#099}
+.CodeRay .class-variable{color:#369}
+.CodeRay .decorator{color:#b0b}
+.CodeRay .definition{color:#099}
+.CodeRay .delimiter{color:#000}
+.CodeRay .doc{color:#970}
+.CodeRay .doctype{color:#34b}
+.CodeRay .doc-string{color:#d42}
+.CodeRay .escape{color:#666}
+.CodeRay .entity{color:#800}
+.CodeRay .error{color:#808}
+.CodeRay .exception{color:inherit}
+.CodeRay .filename{color:#099}
+.CodeRay .function{color:#900;font-weight:bold}
+.CodeRay .global-variable{color:#008080}
+.CodeRay .hex{color:#058}
+.CodeRay .integer,.CodeRay .float{color:#099}
+.CodeRay .include{color:#555}
+.CodeRay .inline{color:#00}
+.CodeRay .inline .inline{background:#ccc}
+.CodeRay .inline .inline .inline{background:#bbb}
+.CodeRay .inline .inline-delimiter{color:#d14}
+.CodeRay .inline-delimiter{color:#d14}
+.CodeRay .important{color:#555;font-weight:bold}
+.CodeRay .interpreted{color:#b2b}
+.CodeRay .instance-variable{color:#008080}
+.CodeRay .label{color:#970}
+.CodeRay .local-variable{color:#963}
+.CodeRay .octal{color:#40e}
+.CodeRay .predefined{color:#369}
+.CodeRay .preprocessor{color:#579}
+.CodeRay .pseudo-class{color:#555}
+.CodeRay .directive{font-weight:bold}
+.CodeRay .type{font-weight:bold}
+.CodeRay .predefined-type{color:inherit}
+.CodeRay .reserved,.CodeRay .keyword {color:#000;font-weight:bold}
+.CodeRay .key{color:#808}
+.CodeRay .key .delimiter{color:#606}
+.CodeRay .key .char{color:#80f}
+.CodeRay .value{color:#088}
+.CodeRay .regexp .delimiter{color:#808}
+.CodeRay .regexp .content{color:#808}
+.CodeRay .regexp .modifier{color:#808}
+.CodeRay .regexp .char{color:#d14}
+.CodeRay .regexp .function{color:#404;font-weight:bold}
+.CodeRay .string{color:#d20}
+.CodeRay .string .string .string{background:#ffd0d0}
+.CodeRay .string .content{color:#d14}
+.CodeRay .string .char{color:#d14}
+.CodeRay .string .delimiter{color:#d14}
+.CodeRay .shell{color:#d14}
+.CodeRay .shell .delimiter{color:#d14}
+.CodeRay .symbol{color:#990073}
+.CodeRay .symbol .content{color:#a60}
+.CodeRay .symbol .delimiter{color:#630}
+.CodeRay .tag{color:#008080}
+.CodeRay .tag-special{color:#d70}
+.CodeRay .variable{color:#036}
+.CodeRay .insert{background:#afa}
+.CodeRay .delete{background:#faa}
+.CodeRay .change{color:#aaf;background:#007}
+.CodeRay .head{color:#f8f;background:#505}
+.CodeRay .insert .insert{color:#080}
+.CodeRay .delete .delete{color:#800}
+.CodeRay .change .change{color:#66f}
+.CodeRay .head .head{color:#f4f}</style><link href="../../../src/docs/theme/idea.css" rel="stylesheet" /><script type="text/javascript">document.write( '<link rel="stylesheet" href="reveal.js/css/print/' + ( window.location.search.match( /print-pdf/gi ) ? 'pdf' : 'paper' ) + '.css" type="text/css" media="print">' );</script><link rel="stylesheet" href="reveal.js/css/theme/fonts.css" type="text/css"/></head><body><div id="header"></div><div class="reveal"><div class="slides"><section><div><img src="images/springone-logo.png" class="frontlogo"></div><h1>Deep dive into the Groovy compiler</h1><p><small>by Cédric Champeau (@CedricChampeau)</small></p></section><section id="who-am-i"><h2>Who am I</h2><div class="listingblock"><div class="content"><pre class="CodeRay"><code class="groovy language-groovy">speaker {
+    name <span class="string"><span class="delimiter">'</span><span class="content">Cédric Champeau</span><span class="delimiter">'</span></span>
+    company <span class="string"><span class="delimiter">'</span><span class="content">Gradle Inc</span><span class="delimiter">'</span></span>
+    oss <span class="string"><span class="delimiter">'</span><span class="content">Apache Groovy committer</span><span class="delimiter">'</span></span>,
+    successes ([<span class="string"><span class="delimiter">'</span><span class="content">Static type checker</span><span class="delimiter">'</span></span>,
+                    <span class="string"><span class="delimiter">'</span><span class="content">Static compilation</span><span class="delimiter">'</span></span>,
+                    <span class="string"><span class="delimiter">'</span><span class="content">Traits</span><span class="delimiter">'</span></span>,
+                    <span class="string"><span class="delimiter">'</span><span class="content">Markup template engine</span><span class="delimiter">'</span></span>,
+                    <span class="string"><span class="delimiter">'</span><span class="content">DSLs</span><span class="delimiter">'</span></span>])
+        failures Stream.of(bugs),
+        twitter <span class="string"><span class="delimiter">'</span><span class="content">@CedricChampeau</span><span class="delimiter">'</span></span>,
+        github <span class="string"><span class="delimiter">'</span><span class="content">melix</span><span class="delimiter">'</span></span>,
+        extraDescription <span class="string"><span class="delimiter">'''</span><span class="content">Groovy in Action 2 co-author
+Misc OSS contribs (Gradle plugins, deck2pdf, jlangdetect, ...)</span><span class="delimiter">'''</span></span>
+}</code></pre></div></div>
+<div class="imageblock" style=""><div class="content"><img src="./images/GradleLogoReg.png" alt="GradleLogoReg" /></div></div></section>
+<section id="groovy-in-action-2"><h2>Groovy in Action 2</h2><div class="paragraph"><p><span class="image"><img src="./images/koenig2.png" alt="koenig2" /></span></p></div>
+<div class="paragraph"><p><a href="https://www.manning.com/books/groovy-in-action-second-edition" class="bare">https://www.manning.com/books/groovy-in-action-second-edition</a></p></div>
+<div class="paragraph"><p>Special coupon code: <strong>ctwspringo2gx</strong></p></div></section>
+<section id="agenda"><h2>Agenda</h2><div class="ulist"><ul><li><p>Interpreted vs compiled</p></li><li><p>Scripts vs classes</p></li><li><p>Parsing</p></li><li><p>Abstract Syntax Trees</p></li><li><p>Resolving</p></li><li><p>Run-time vs compile-time</p></li><li><p>Static type checking</p></li><li><p>Bytecode generation</p></li><li><p>Class loading</p></li></ul></div></section>
+<section id="interpreted-vs-compiled"><h2>Interpreted vs compiled</h2><div class="ulist"><ul><li><p>Groovy is a dynamic language</p></li><li><p>Dynamic != interpreted</p></li><li><p>Interpreted == a runtime interprets an AST</p></li><li><p>JVM is an interpreter + a JIT</p></li><li><p>Groovy compiles down to JVM bytecode</p></li></ul></div></section>
+<section><section id="scripts-vs-classes"><h2>Scripts vs classes</h2></section><section id="a-java-class"><h2>A Java class</h2><div class="listingblock"><div class="content"><pre class="CodeRay"><code class="java language-java"><span class="directive">public</span> <span class="type">class</span> <span class="class">Greeter</span> {
+    <span class="directive">public</span> <span class="directive">static</span> <span class="type">void</span> main(<span class="predefined-type">String</span>... args) {
+        <span class="predefined-type">System</span>.out.println(<span class="string"><span class="delimiter">&quot;</span><span class="content">Hello, </span><span class="delimiter">&quot;</span></span>+args[<span class="integer">0</span>]);
+    }
+}</code></pre></div></div></section><section id="a-groovy-script"><h2>A Groovy script</h2><div class="listingblock"><div class="content"><pre class="CodeRay"><code class="groovy language-groovy">println <span class="string"><span class="delimiter">&quot;</span><span class="content">Hello, </span><span class="inline"><span class="inline-delimiter">$</span>args</span><span class="content">[0]</span><span class="delimiter">&quot;</span></span></code></pre></div></div></section><section id="what-is-the-difference"><h2>What is the difference?</h2><div class="ulist"><ul><li><p>Classes are compiled to bytecode</p></li><li><p>Scripts are <strong>also</strong> compiled to bytecode</p></li><li><p>So it&#8217;s more a run-time vs compile-time discussion!</p></li></ul></div></section><section id="compile-time"><h2>Compile-time</h2><div class="ulist"><ul><li><p>Given a set of source files</p></li><li><p>Compile them</p></li><li><p>Output is bytecode</p><div class="ulist"><ul><li><p>cacheable (library, jar file, &#8230;&#8203;)</p></li><li><p>loadable by the runtime (classloader)</p></li></ul></div></li></ul></div></section><section id="run-time"><h2>Run-time</h2><div class="ulist"><ul><li><p>Same as compile-time but&#8230;&#8203;</p></li><li><p>done during execution of the program!</p></li><li><p>Groovy does <strong>both</strong></p><div class="ulist"><ul><li><p>consequences on packaging</p></li><li><p>consequences on the size of the runtime</p></li></ul></div></li></ul></div></section><section id="run-time-vs-runtime"><h2>Run-time vs runtime</h2><div class="ulist"><ul><li><p>A <em>runtime</em> provides support libraries to execute a compiled program</p></li><li><p>Run-time is what happens at run time</p></li><li><p>Groovy has a runtime</p></li><li><p>Java also (the JRE, providing core classes)</p></li></ul></div></section></section>
+<section><section id="compilation-phases"><h2>Compilation phases</h2><div class="ulist"><ul><li><p>Groovy has 9 compilation phases (see <code>org.codehaus.groovy.control.CompilePhase</code>)</p><div class="ulist"><ul><li><p>initialization</p></li><li><p><strong>parsing</strong></p></li><li><p><strong>conversion</strong></p></li><li><p><strong>semantic analysis</strong></p></li><li><p>canonicalization</p></li><li><p>instruction selection</p></li><li><p><strong>class generation</strong></p></li><li><p>output</p></li><li><p>finalization</p></li></ul></div></li></ul></div></section><section id="visualizing-compilation-phases"><h2>Visualizing compilation phases</h2><div class="imageblock" style=""><div class="content"><img src="./images/groovyconsole.png" alt="groovyconsole" /></div></div></section><section id="parsing"><h2>Parsing</h2><div class="ulist"><ul><li><p>Converts source code (text) into a concrete syntax tree (CST)</p></li><li><p>Where we send <em>syntax errors</em></p></li><li><p>Groovy tries to minimize the errors at that phase</p></li><li><p>We make use of <strong>Antlr 2</strong></p><div class="ulist"><ul><li><p>Migration to <strong>Antlr 4</strong> in progress</p></li></ul></div></li><li><p>See <code>org.codehaus.groovy.antlr.AntlrParserPlugin</code></p></li><li><p>Limited transformations available (and not recommended)</p></li></ul></div></section><section id="conversion"><h2>Conversion</h2><div class="ulist"><ul><li><p>Converts a CST into an Abstract Syntax Tree</p></li><li><p>AST nodes are what the other compilation phases rely on</p></li><li><p>There&#8217;s already semantic information in an AST</p></li><li><p>Earliest phase an AST transformation can hook into</p></li></ul></div></section><section id="conversion-ast-nodes"><h2>Conversion: AST nodes</h2><div class="ulist"><ul><li><p>2 categories</p><div class="ulist"><ul><li><p>statements (<code>IfStatement</code>, <code>BlockStatement</code>, &#8230;&#8203;)</p></li><li><p>expressions (<code>ConstantExpression</code>, <code>MethodCallExpression</code>, &#8230;&#8203;)</p></li></ul></div></li><li><p>Know your AST!</p><div class="ulist"><ul><li><p>particularily useful if you plan on writing AST transformations</p></li></ul></div></li></ul></div></section><section id="conversion-ast-nodes-example"><h2>Conversion: AST nodes example</h2><div class="listingblock"><div class="content"><pre class="CodeRay"><code>println "Hello, $args[0]"</code></pre></div></div>
+<div class="imageblock" style=""><div class="content"><img src="./images/println-hello-ast.png" alt="println hello ast" /></div></div></section><section id="conversion-abstract-syntax-tree"><h2>Conversion: Abstract Syntax Tree</h2><div class="ulist"><ul><li><p>typically where an interpreter would step in</p></li><li><p>at the core of the Groovy compiler</p></li><li><p>AST classes live in <code>org.codehaus.groovy.ast</code></p></li><li><p>Still somehow <em>runtime agnostic</em></p><div class="ulist"><ul><li><p>In practice, <code>ClassNode</code> already bridges to <code>java.lang.Class</code></p></li></ul></div></li><li><p>Start of visitor pattern</p></li></ul></div></section><section id="semantic-analysis"><h2>Semantic analysis</h2><div class="ulist"><ul><li><p>computation intensive phase</p></li><li><p>resolves class literals (symbols in AST, imports, &#8230;&#8203;)</p></li><li><p>resolves static imports (constants, methods)</p></li><li><p>computes the scope of parameters and local variables</p></li><li><p>checks static scope vs instance scope</p></li><li><p>updates the AST of inner classes</p></li><li><p>collects AST transformations information</p></li></ul></div></section><section id="semantic-analysis-resolving"><h2>Semantic analysis: resolving</h2><div class="ulist"><ul><li><p>High price in compilation time</p></li><li><p>When we see <code>Foo</code>, need to:</p><div class="ulist"><ul><li><p>check if <code>Foo</code> is something on classpath</p></li><li><p>check if <code>Foo</code> is another class being compiled (or script)</p></li></ul></div></li><li><p>Must avoid class initialization</p></li></ul></div></section><section id="canonicalization"><h2>Canonicalization</h2><div class="ulist"><ul><li><p>Finalizes the AST with information deduced from the semantic analysis</p></li><li><p>Completes generation of AST of inner classes</p></li><li><p>Completes enumerations with calls to <code>super</code></p></li><li><p>Weaves trait aspects into classes implementing traits</p></li><li><p>Usually last chance to hook an AST transformation</p></li></ul></div></section><section id="instruction-selection"><h2>Instruction selection</h2><div class="ulist"><ul><li><p>Formely used to select the instruction set (java version, &#8230;&#8203;)</p></li><li><p>(Optional) Type checking</p></li><li><p>Post-type checking trait corrections</p></li><li><p>(optional) static compiler specific AST transformations</p></li><li><p>in short: all AST operations that need to be done just before generating bytecode</p></li></ul></div></section><section id="class-generation"><h2>Class generation</h2><div class="ulist"><ul><li><p>Converts an AST into bytecode</p></li><li><p>Makes use of the ASM library</p></li><li><p>we&#8217;ll get back to it&#8230;&#8203;</p></li></ul></div></section><section id="output"><h2>Output</h2><div class="ulist"><ul><li><p>(optional) write the generated bytecode into a file</p></li></ul></div></section><section id="finalization"><h2>Finalization</h2><div class="ulist"><ul><li><p>supposed to perform cleanup tasks</p></li><li><p>Unused today!</p></li></ul></div></section><section id="putting-it-altogether"><h2>Putting it altogether</h2><div class="ulist"><ul><li><p><code>CompilationUnit</code> is responsible for the compile phases lifecycle</p></li><li><p>processes a set of <code>SourceUnit</code></p></li><li><p>a <code>SourceUnit</code> represents a single source file (or script)</p></li><li><p>a <code>CompileUnit</code> gathers all ASTs of a compilation unit in a single place</p><div class="ulist"><ul><li><p>typically used for <em>resolution</em></p></li></ul></div></li><li><p>all source units are processed <em>phase by phase</em></p></li></ul></div></section></section>
+<section><section id="ast-transformations"><h2>AST Transformations</h2></section><section id="what-are-ast-xforms"><h2>What are AST xforms?</h2><div class="ulist"><ul><li><p>User code that hooks into the compiler</p></li><li><p>Allows transforming the AST during compilation</p></li><li><p>A transform runs at a specific phases</p><div class="ulist"><ul><li><p>a best, <em>conversion</em></p></li><li><p>usually, <em>semantic analysis</em></p></li><li><p>no later than <strong>canonicalization</strong></p></li></ul></div></li><li><p>If you do it later&#8230;&#8203; all bets are off!</p></li></ul></div></section><section id="user-code"><h2>User code?</h2><div class="ulist"><ul><li><p>Groovy comes with several AST xforms</p></li><li><p>some features of the compiler are implemented as AST xforms</p><div class="ulist"><ul><li><p>traits</p></li><li><p>static type checking</p></li></ul></div></li></ul></div></section><section id="static-type-checking"><h2>Static type checking</h2><div class="ulist"><ul><li><p>Implemented (mostly) as an AST transformation</p></li><li><p>Annotates AST nodes with <strong>metadata</strong></p></li><li><p>Flow typing</p></li><li><p><strong>Must</strong> be done very last in compiler phases</p><div class="ulist"><ul><li><p><code>INSTRUCTION_SELECTION</code></p></li></ul></div></li></ul></div></section></section>
+<section><section id="composition-of-traits"><h2>Composition of traits</h2><div class="ulist"><ul><li><p>Traits are a superior replacement to mixins</p></li><li><p>Built-in since Groovy 2.3</p></li><li><p>How are they compiled?</p></li></ul></div></section><section id="step-1-define-a-trait"><h2>Step 1: define a trait</h2><div class="listingblock"><div class="content"><pre class="CodeRay"><code>trait HasName {
+   String name
+}
+class NamedObject implements HasName {}</code></pre></div></div></section><section id="step-2-convert-a-trait"><h2>Step 2: convert a trait</h2><div class="ulist"><ul><li><p>Converts a trait into "JVM compatible" objets</p></li></ul></div>
+<div class="listingblock"><div class="content"><pre class="CodeRay"><code>interface HasName {
+    void setName(String name)
+
+    String getName(String name)
+
+    static class HasName$Trait$Helper {
+        public static void $init$(HasName $self) {
+        }
+
+        public static void $static$init$(java.lang.Class&lt;HasName&gt; $static$self) {
+        }
+
+        public static String getName(HasName $self) {
+            ((HasName$Trait$FieldHelper) ($self)).HasName__name$get()
+        }
+
+        public static void setName(HasName $self, String value) {
+            ((HasName$Trait$FieldHelper) ($self)).HasName__name$set(value)
+        }
+    }
+
+    static interface HasName$Trait$FieldHelper {
+
+        final public static String $ins$1HasName__name
+
+        String HasName__name$set(String val)
+
+        String HasName__name$get()
+    }
+
+}</code></pre></div></div></section><section id="step-3-weave-the-consumer"><h2>Step 3 : weave the consumer</h2><div class="ulist"><ul><li><p>At <em>canonicalization</em>:</p></li></ul></div>
+<div class="listingblock"><div class="content"><pre class="CodeRay"><code>class NamedObject implements HasName, HasName$Trait$FieldHelper {
+
+    static {
+        HasName$Trait$Helper.$static$init$(NamedObject)
+    }
+
+    private String HasName__name
+
+    @groovy.transform.CompileStatic
+    public String HasName__name$get() {
+        return HasName__name
+    }
+
+    @groovy.transform.CompileStatic
+    public String HasName__name$set(String val) {
+        HasName__name = val
+    }
+
+    @Traits$TraitBridge(traitClass = HasName, desc = '(Ljava/lang/String;)V')
+    public void setName(String arg1) {
+        HasName$Trait$Helper.setName(this, arg1)
+    }
+
+    @Traits$TraitBridge(traitClass = HasName, desc = '()Ljava/lang/String;')
+    public String getName() {
+        HasName$Trait$Helper.getName(this)
+    }
+
+    public String HasNametrait$super$getName() {
+        if ( this instanceof GeneratedGroovyProxy) {
+            (String) (InvokerHelper.invokeMethod((((GeneratedProxy) this)).getProxyTarget(), 'getName', new Object[]))
+        } else {
+            super.getName()
+        }
+    }
+
+    public void HasNametrait$super$setName(String value) {
+        if ( this instanceof GeneratedGroovyProxy) {
+            InvokerHelper.invokeMethod((((GeneratedProxy) this)).getProxyTarget(), 'setName', new Object[])
+        } else {
+            super.setName(value)
+        }
+    }
+
+}</code></pre></div></div></section></section>
+<section><section id="bytecode-generation"><h2>Bytecode generation</h2><div class="ulist"><ul><li><p>Groovy targets the JVM</p></li><li><p>Android is supported by post-processing bytecode (dex)</p></li><li><p>Bytecode generation library: ASM</p></li><li><p>3 different backends</p><div class="ulist"><ul><li><p>legacy</p></li><li><p>invokedynamic</p></li><li><p>static compilation</p></li></ul></div></li></ul></div></section><section id="but"><h2>But&#8230;&#8203;</h2><div class="ulist"><ul><li><p>ASM is a low level API</p></li><li><p>Groovy uses a higher level API</p><div class="ulist"><ul><li><p><code>AsmCodeGenerator</code> : entry point, visitor pattern for the Groovy AST</p></li><li><p>writers: <code>WriterController</code>, <code>BinaryExpressionWriter</code>, <code>InvocationWriter</code>, &#8230;&#8203; map ASTs to ASM patterns</p></li><li><p>helpers: <code>BytecodeHelper</code>, <code>CompileStack</code>, <code>OperandStack</code> simplify the generation of bytecode</p></li></ul></div></li></ul></div></section><section id="dealing-with-specific-runtimes"><h2>Dealing with specific runtimes</h2><div class="ulist"><ul><li><p>Dedicated writer versions</p><div class="ulist"><ul><li><p><code>CallSiteWriter</code> &#8594; <code>StaticTypesCallSiteWriter</code></p></li></ul></div></li><li><p>Optimized paths</p><div class="ulist"><ul><li><p>Primitive optimizations</p></li><li><p>Static compilation</p></li><li><p>Static compiler can delegate to a dynamic writer</p></li></ul></div></li></ul></div></section><section id="dynamic-runtime"><h2>Dynamic runtime</h2><div class="listingblock"><div class="content"><pre class="CodeRay"><code class="groovy language-groovy"><span class="type">int</span> sum(<span class="type">int</span>... values) {
+   values.sum()
+}</code></pre></div></div>
+<div class="paragraph"><p><code>groovyc example.groovy</code></p></div>
+<div class="paragraph"><p><code>javap -v example.class</code></p></div></section><section id="dynamic-runtime-2"><h2>Dynamic runtime (2)</h2><div class="listingblock"><div class="content"><pre class="CodeRay"><code>         0: invokestatic  #17                 // Method $getCallSiteArray:()[Lorg/codehaus/groovy/runtime/callsite/CallSite;
+         3: astore_2
+         4: aload_2
+         5: ldc           #42                 // int 1
+         7: aaload
+         8: aload_1
+         9: invokeinterface #45,  2           // InterfaceMethod org/codehaus/groovy/runtime/callsite/CallSite.call:(Ljava/lang/Object;)Ljava/lang/Object;
+        14: invokestatic  #51                 // Method org/codehaus/groovy/runtime/typehandling/DefaultTypeTransformation.intUnbox:(Ljava/lang/Object;)I
+        17: ireturn</code></pre></div></div></section><section id="invokedynamic-runtime"><h2>Invokedynamic runtime</h2><div class="paragraph"><p><code>groovyc --indy example.groovy</code></p></div>
+<div class="listingblock"><div class="content"><pre class="CodeRay"><code>         0: aload_1
+         1: invokedynamic #50,  0             // InvokeDynamic #1:invoke:([I)Ljava/lang/Object;
+         6: invokestatic  #56                 // Method org/codehaus/groovy/runtime/typehandling/DefaultTypeTransformation.intUnbox:(Ljava/lang/Object;)I
+         9: ireturn</code></pre></div></div></section><section id="static-compiler-runtime"><h2>Static compiler runtime</h2><div class="paragraph"><p><code>groovyc --configscript config.groovy example.groovy</code></p></div>
+<div class="listingblock"><div class="content"><pre class="CodeRay"><code>         0: aload_1
+         1: invokestatic  #38                 // Method org/codehaus/groovy/runtime/DefaultGroovyMethods.sum:([I)I
+         4: ireturn</code></pre></div></div></section><section id="playing-with-bytecode-generation"><h2>Playing with bytecode generation</h2><div class="listingblock"><div class="content"><pre class="CodeRay"><code class="groovy language-groovy">            <span class="type">int</span> run(<span class="type">int</span> i) {
+                _new <span class="string"><span class="delimiter">'</span><span class="content">java/lang/Integer</span><span class="delimiter">'</span></span>
+                dup
+                iload <span class="integer">1</span>
+                invokespecial <span class="string"><span class="delimiter">'</span><span class="content">java/lang/Integer.&lt;init&gt;</span><span class="delimiter">'</span></span>,<span class="string"><span class="delimiter">'</span><span class="content">(I)V</span><span class="delimiter">'</span></span>
+                invokevirtual <span class="string"><span class="delimiter">'</span><span class="content">java/lang/Integer.intValue</span><span class="delimiter">'</span></span>,<span class="string"><span class="delimiter">'</span><span class="content">()I</span><span class="delimiter">'</span></span>
+                ireturn
+            }</code></pre></div></div></section><section id="what-happens"><h2>What happens?</h2><div class="ulist"><ul><li><p>An <strong>AST transformation</strong> is applied (<code>@Bytecode</code>)</p></li><li><p>Transforms "bytecode-like" method calls into actual <strong>ASM</strong> method calls</p></li><li><p>So allows writing "bytecode" directly as method body</p></li><li><p>Very useful for learning purposes</p></li><li><p>Limited to method bodies</p></li></ul></div></section></section>
+<section><section id="classloading"><h2>Classloading</h2><div class="ulist"><ul><li><p>Bytecode &#8594; <code>byte[]</code></p></li><li><p>Still have to load that code</p></li><li><p>For precompiled classes, can be done by any classloader</p></li><li><p><code>GroovyClassLoader</code></p><div class="ulist"><ul><li><p>supports generation of classes at <strong>runtime</strong></p></li><li><p>will cache the generated classes</p></li></ul></div></li></ul></div></section><section id="rootloader"><h2>RootLoader</h2><div class="ulist"><ul><li><p>Special classloader that reverses the logic of parent vs child</p></li><li><p>Used to implement different classpath</p></li><li><p>Mutable</p></li></ul></div></section><section id="callsiteclassloader"><h2>CallSiteClassLoader</h2><div class="ulist"><ul><li><p>Used <strong>only</strong> on the legacy dynamic runtime</p></li><li><p>Loads <em>call site classes</em></p></li><li><p>Call site class: dynamically generated classes which avoid use of reflection</p></li></ul></div></section></section>
+<section id="questions"><h2>Questions</h2><div class="imageblock" style=""><div class="content"><img src="./images/qa.png" alt="qa" /></div></div></section>
+<section id="we-re-hiring"><h2>We&#8217;re hiring!</h2><div class="paragraph"><p><a href="http://gradle.org/gradle-jobs/" class="bare">http://gradle.org/gradle-jobs/</a></p></div>
+<div class="imageblock" style=""><div class="content"><img src="./images/GradleLogoLarge.png" alt="GradleLogoLarge" /></div></div></section>
+<section id="thank-you"><h2>Thank you!</h2><div class="ulist"><ul><li><p>Slides and code : <a href="https://github.com/melix/s2gx-deepdive-groovy-compiler" class="bare">https://github.com/melix/s2gx-deepdive-groovy-compiler</a></p></li><li><p>Groovy documentation : <a href="http://groovy-lang.org/documentation.html" class="bare">http://groovy-lang.org/documentation.html</a></p></li><li><p>Follow me: <a href="http://twitter.com/CedricChampeau">@CedricChampeau</a></p></li></ul></div></section></div></div><script src="reveal.js/lib/js/head.min.js"></script><script src="reveal.js/js/reveal.js"></script><script type="text/javascript">// See https://github.com/hakimel/reveal.js#configuration for a full list of configuration options
+Reveal.initialize({
+  // Display controls in the bottom right corner
+  controls: true,
+  // Display a presentation progress bar
+  progress: true,
+  // Display the page number of the current slide
+  slideNumber: true,
+  // Push each slide change to the browser history
+  history: true,
+  // Enable keyboard shortcuts for navigation
+  keyboard: true,
+  // Enable the slide overview mode
+  overview: true,
+  // Vertical centering of slides
+  center: true,
+  // Enables touch navigation on devices with touch input
+  touch: true,
+  // Loop the presentation
+  loop: false,
+  // Change the presentation direction to be RTL
+  rtl: false,
+  // Turns fragments on and off globally
+  fragments: true,
+  // Flags if the presentation is running in an embedded mode,
+  // i.e. contained within a limited portion of the screen
+  embedded: false,
+  // Number of milliseconds between automatically proceeding to the
+  // next slide, disabled when set to 0, this value can be overwritten
+  // by using a data-autoslide attribute on your slides
+  autoSlide: 0,
+  // Stop auto-sliding after user input
+  autoSlideStoppable: true,
+  // Enable slide navigation via mouse wheel
+  mouseWheel: false,
+  // Hides the address bar on mobile devices
+  hideAddressBar: true,
+  // Opens links in an iframe preview overlay
+  previewLinks: false,
+  // Theme (e.g., beige, black, league, night, serif, simple, sky, solarized, white)
+  // NOTE setting the theme in the config no longer works in reveal.js 3.x
+  //theme: Reveal.getQueryHash().theme || 's2gx',
+  // Transition style (e.g., none, fade, slide, convex, concave, zoom)
+  transition: Reveal.getQueryHash().transition || 'linear',
+  // Transition speed (e.g., default, fast, slow)
+  transitionSpeed: 'default',
+  // Transition style for full page slide backgrounds (e.g., none, fade, slide, convex, concave, zoom)
+  backgroundTransition: 'fade',
+  // Number of slides away from the current that are visible
+  viewDistance: 3,
+  // Parallax background image (e.g., "'https://s3.amazonaws.com/hakim-static/reveal-js/reveal-parallax-1.jpg'")
+  parallaxBackgroundImage: '',
+  // Parallax background size in CSS syntax (e.g., "2100px 900px")
+  parallaxBackgroundSize: '',
+
+  // The "normal" size of the presentation, aspect ratio will be preserved
+  // when the presentation is scaled to fit different resolutions. Can be
+  // specified using percentage units.
+  width: 960,
+  height: 700,
+
+  // Factor of the display size that should remain empty around the content
+  margin: 0.1,
+
+  // Bounds for smallest/largest possible scale to apply to content
+  minScale: 0.2,
+  maxScale: 1.5,
+
+  // Optional libraries used to extend on reveal.js
+  dependencies: [
+      { src: 'reveal.js/lib/js/classList.js', condition: function() { return !document.body.classList; } },
+      { src: 'reveal.js/plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+      { src: 'reveal.js/plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+      
+      { src: 'reveal.js/plugin/zoom-js/zoom.js', async: true, condition: function() { return !!document.body.classList; } },
+      { src: 'reveal.js/plugin/notes/notes.js', async: true, condition: function() { return !!document.body.classList; } }
+  ]
+});</script><div id="footer">
+  <img src="images/springone2gx.png" height="40" style="float: left; margin: 0px 15px 15px 0px;">
+  <p>Unless otherwise indicated, these slides are © 2015 Gradle, Inc. and licensed under a
+  Creative Commons Attribution-NonCommercial license http://creativecommons.org/licenses/by-nc/3.0/</p>
+</div></body></html>
