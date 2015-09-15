@@ -1,4 +1,4 @@
-= Convention over configuration: The Gradle Way
+= Deep dive into the Groovy compiler
 
-Slides for talk given at BordeauxJUG, May 5, 2015
+Slides for talk given at SpringOne2GX, September 15th, 2015
 
