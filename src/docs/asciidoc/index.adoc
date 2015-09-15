@@ -38,6 +38,14 @@ Misc OSS contribs (Gradle plugins, deck2pdf, jlangdetect, ...)'''
 
 image::GradleLogoReg.png[]
 
+== Groovy in Action 2
+
+image:koenig2.png[]
+
+https://www.manning.com/books/groovy-in-action-second-edition
+
+Special coupon code: *ctwspringo2gx*
+
 == Agenda
 
 * Interpreted vs compiled
@@ -447,6 +455,12 @@ int sum(int... values) {
 * `GroovyClassLoader`
 ** supports generation of classes at *runtime*
 ** will cache the generated classes
+
+=== RootLoader
+
+* Special classloader that reverses the logic of parent vs child
+* Used to implement different classpath
+* Mutable
 
 === CallSiteClassLoader
 
